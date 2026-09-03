@@ -1189,18 +1189,41 @@ $("next").onclick=()=>{
 };
 
 // Commandes natives : écran verrouillé, Centre de contrôle et casque.
-if("mediaSession" in navigator){
-  const previous=()=>$("prev").onclick();
-  const next=()=>$("next").onclick();
+// Sur iOS, les commandes piste doivent être enregistrées APRÈS le début
+// réel de la lecture. Les commandes ±10 s doivent rester désactivées.
+function setupMediaSessionActions(){
+  if(!("mediaSession" in navigator))return;
+  const previous=()=>{ const b=$("prev"); if(b) b.click(); };
+  const next=()=>{ const b=$("next"); if(b) b.click(); };
   try{navigator.mediaSession.setActionHandler("play",()=>audio.play().catch(()=>{}));}catch(e){}
   try{navigator.mediaSession.setActionHandler("pause",()=>audio.pause());}catch(e){}
   try{navigator.mediaSession.setActionHandler("previoustrack",previous);}catch(e){}
   try{navigator.mediaSession.setActionHandler("nexttrack",next);}catch(e){}
-  // Ne pas déclarer seekbackward/seekforward ici : sur iPhone, leur présence
-  // peut remplacer les boutons piste précédente/suivante par des boutons ±10 s.
-  // La barre de progression du lecteur BOB reste utilisable pour naviguer dans le morceau.
-  try{navigator.mediaSession.setActionHandler("seekto",d=>{if(Number.isFinite(d.seekTime))audio.currentTime=d.seekTime;});}catch(e){}
+  // Important sur iPhone : désactiver explicitement les commandes de recherche.
+  try{navigator.mediaSession.setActionHandler("seekbackward",null);}catch(e){}
+  try{navigator.mediaSession.setActionHandler("seekforward",null);}catch(e){}
+  try{navigator.mediaSession.setActionHandler("seekto",d=>{
+    if(Number.isFinite(d.seekTime))audio.currentTime=d.seekTime;
+  });}catch(e){}
 }
+
+audio.addEventListener("playing",()=>{
+  setupMediaSessionActions();
+  updateMediaSession();
+});
+
+audio.addEventListener("durationchange",()=>{
+  if("mediaSession" in navigator && Number.isFinite(audio.duration) && audio.duration>0){
+    try{navigator.mediaSession.setPositionState({duration:audio.duration,position:Math.min(audio.currentTime,audio.duration),playbackRate:audio.playbackRate||1});}catch(e){}
+  }
+});
+
+audio.addEventListener("timeupdate",()=>{
+  if("mediaSession" in navigator && Number.isFinite(audio.duration) && audio.duration>0){
+    try{navigator.mediaSession.setPositionState({duration:audio.duration,position:Math.min(audio.currentTime,audio.duration),playbackRate:audio.playbackRate||1});}catch(e){}
+  }
+});
+
 audio.onplay=()=>{updateMediaSession();update();pulsePlayer();render();};
 audio.onpause=()=>{updateMediaSession();update();render();};
 audio.onended=()=>{

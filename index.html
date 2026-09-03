@@ -1052,15 +1052,32 @@ async function deleteTrackFromPlaylist(index){
 }
 window.deleteTrackFromPlaylist=deleteTrackFromPlaylist;
 
+function updateMediaSession(){
+  if(!("mediaSession" in navigator) || current<0 || !tracks[current])return;
+  const t=tracks[current];
+  const playlist=playlists[activePlaylist];
+  const artwork=playlist?.cover || dataUri;
+  try{
+    navigator.mediaSession.metadata=new MediaMetadata({
+      title:t.name||"Sans titre",
+      artist:playlist?.artist||$("artist")?.textContent||"BOB",
+      album:playlist?.name||"BOB",
+      artwork:[{src:artwork,sizes:"512x512",type:"image/png"}]
+    });
+    navigator.mediaSession.playbackState=audio.paused?"paused":"playing";
+  }catch(err){console.warn("Media Session indisponible",err);}
+}
+
 function selectTrack(i,auto=true){
   if(!tracks[i])return;
   current=i;
   const t=tracks[i];
   audio.src=t.url;
   $("nowTitle").textContent=t.name;
-  $("nowArtist").textContent="BOB";
+  $("nowArtist").textContent=playlists[activePlaylist]?.artist||"BOB";
   $("miniCover").src=playlists[activePlaylist]?.cover||dataUri;
   $("duration").textContent=fmt(t.duration);
+  updateMediaSession();
   if(auto)audio.play().catch(()=>{});
   update();
 }
@@ -1170,8 +1187,21 @@ $("next").onclick=()=>{
   const list=playlists[activePlaylist]?.tracks||[], pos=list.findIndex(t=>t.id===tracks[current]?.id);
   if(pos>=0&&pos<list.length-1){const i=tracks.findIndex(t=>t.id===list[pos+1].id);if(i>=0)selectTrack(i);}
 };
-audio.onplay=()=>{update();pulsePlayer();render();};
-audio.onpause=()=>{update();render();};
+
+// Commandes natives : écran verrouillé, Centre de contrôle et casque.
+if("mediaSession" in navigator){
+  const previous=()=>$("prev").onclick();
+  const next=()=>$("next").onclick();
+  try{navigator.mediaSession.setActionHandler("play",()=>audio.play().catch(()=>{}));}catch(e){}
+  try{navigator.mediaSession.setActionHandler("pause",()=>audio.pause());}catch(e){}
+  try{navigator.mediaSession.setActionHandler("previoustrack",previous);}catch(e){}
+  try{navigator.mediaSession.setActionHandler("nexttrack",next);}catch(e){}
+  try{navigator.mediaSession.setActionHandler("seekbackward",d=>{audio.currentTime=Math.max(0,audio.currentTime-(d.seekOffset||10));});}catch(e){}
+  try{navigator.mediaSession.setActionHandler("seekforward",d=>{audio.currentTime=Math.min(audio.duration||Infinity,audio.currentTime+(d.seekOffset||10));});}catch(e){}
+  try{navigator.mediaSession.setActionHandler("seekto",d=>{if(Number.isFinite(d.seekTime))audio.currentTime=d.seekTime;});}catch(e){}
+}
+audio.onplay=()=>{updateMediaSession();update();pulsePlayer();render();};
+audio.onpause=()=>{updateMediaSession();update();render();};
 audio.onended=()=>{
   const list=playlists[activePlaylist]?.tracks||[];
   if(!list.length)return;

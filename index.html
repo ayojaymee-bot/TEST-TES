@@ -1196,8 +1196,9 @@ if("mediaSession" in navigator){
   try{navigator.mediaSession.setActionHandler("pause",()=>audio.pause());}catch(e){}
   try{navigator.mediaSession.setActionHandler("previoustrack",previous);}catch(e){}
   try{navigator.mediaSession.setActionHandler("nexttrack",next);}catch(e){}
-  try{navigator.mediaSession.setActionHandler("seekbackward",d=>{audio.currentTime=Math.max(0,audio.currentTime-(d.seekOffset||10));});}catch(e){}
-  try{navigator.mediaSession.setActionHandler("seekforward",d=>{audio.currentTime=Math.min(audio.duration||Infinity,audio.currentTime+(d.seekOffset||10));});}catch(e){}
+  // Ne pas déclarer seekbackward/seekforward ici : sur iPhone, leur présence
+  // peut remplacer les boutons piste précédente/suivante par des boutons ±10 s.
+  // La barre de progression du lecteur BOB reste utilisable pour naviguer dans le morceau.
   try{navigator.mediaSession.setActionHandler("seekto",d=>{if(Number.isFinite(d.seekTime))audio.currentTime=d.seekTime;});}catch(e){}
 }
 audio.onplay=()=>{updateMediaSession();update();pulsePlayer();render();};

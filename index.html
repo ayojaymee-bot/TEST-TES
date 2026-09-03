@@ -728,8 +728,9 @@ body::before{
     <p id="authMessage">Connecte-toi pour retrouver tes playlists sur tous tes appareils.</p>
     <input id="authEmail" type="email" placeholder="E-mail" autocomplete="email">
     <input id="authPassword" type="password" placeholder="Mot de passe" autocomplete="current-password">
-    <button class="primary" id="authSubmit">SE CONNECTER</button>
-    <button class="auth-switch" id="authSwitch">Créer un compte</button>
+    <button type="button" class="primary" id="authSubmit">SE CONNECTER</button>
+    <div id="authStatus" style="min-height:18px;margin-top:10px;color:#999;font-size:12px"></div>
+    <button type="button" class="auth-switch" id="authSwitch">Créer un compte</button>
     <button class="auth-logout" id="authLogout" style="display:none">SE DÉCONNECTER</button>
   </div>
 </div>
@@ -1240,17 +1241,24 @@ function setAuthMode(mode){
   $("authMessage").textContent=login?"Connecte-toi pour retrouver tes playlists sur tous tes appareils.":"Crée ton compte BOB pour enregistrer tes musiques et playlists.";
   $("authSubmit").textContent=login?"SE CONNECTER":"CRÉER LE COMPTE";
   $("authSwitch").textContent=login?"Créer un compte":"J'ai déjà un compte";
+  $("authStatus").textContent="";
 }
 function showAuth(){
   $("authOverlay").style.display="flex";
   $("authLogout").style.display="none";
+  setAuthMode(authMode||"login");
 }
 $("authSwitch").onclick=()=>setAuthMode(authMode==="login"?"signup":"login");
 
-$("authSubmit").onclick=async()=>{
+async function submitAuth(){
   const email=$("authEmail").value.trim(),password=$("authPassword").value;
-  if(!email||!password){alert("Entre ton e-mail et ton mot de passe.");return}
-  $("authSubmit").disabled=true;
+  const status=$("authStatus");
+  const btn=$("authSubmit");
+  if(!email||!password){status.textContent="Entre ton e-mail et ton mot de passe.";return;}
+  if(!window.supabase||!sb){status.textContent="Connexion au service impossible. Recharge la page.";return;}
+  btn.disabled=true;
+  btn.textContent=authMode==="login"?"CONNEXION…":"CRÉATION…";
+  status.textContent="";
   try{
     if(authMode==="signup"){
       const {data,error}=await sb.auth.signUp({email,password});
@@ -1258,24 +1266,32 @@ $("authSubmit").onclick=async()=>{
       if(data.session){
         user=data.user;
         updateAdminComposer();
-        await ensureDefaultPlaylists();
         await startApp();
       }else{
-        alert("Compte créé. Tu peux maintenant te connecter.");
+        status.textContent="Compte créé. Vérifie ton e-mail si une confirmation est demandée, puis connecte-toi.";
         setAuthMode("login");
       }
     }else{
       const {data,error}=await sb.auth.signInWithPassword({email,password});
       if(error)throw error;
-      user=data.user;
+      const session=data?.session;
+      if(!session?.user)throw new Error("Connexion refusée : aucune session n'a été créée.");
+      user=session.user;
       updateAdminComposer();
       await startApp();
     }
   }catch(err){
-    console.error(err);
-    alert(err.message||"Impossible de se connecter.");
-  }finally{$("authSubmit").disabled=false}
-};
+    console.error("BOB auth",err);
+    const msg=err?.message||String(err)||"Impossible de se connecter.";
+    status.textContent=msg;
+  }finally{
+    btn.disabled=false;
+    btn.textContent=authMode==="login"?"SE CONNECTER":"CRÉER LE COMPTE";
+  }
+}
+$("authSubmit").addEventListener("click",submitAuth);
+$("authPassword").addEventListener("keydown",e=>{if(e.key==="Enter")submitAuth();});
+$("authEmail").addEventListener("keydown",e=>{if(e.key==="Enter")$("authPassword").focus();});
 
 $("authLogout").onclick=async()=>{
   await sb.auth.signOut();
